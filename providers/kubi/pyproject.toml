@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Kubi
+# SPDX-License-Identifier: PolyForm-Shield-1.0.0
+
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sps-provider-kubi"
+version = "0.1.0"
+description = "Kubi (always-on Linux desktops for AI agents) as a Sandbox Provider Spec 1.1 provider"
+readme = "README.md"
+license = "LicenseRef-PolyForm-Shield-1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "sandbox-provider-spec",
+    "httpx==0.28.1",
+]
+
+[project.entry-points."sandbox_provider_spec.providers"]
+kubi = "sps_provider_kubi:KubiProvider"
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+]
+tools = [
+    "sandbox-provider-spec[http]",
+]
+
+[tool.uv.sources]
+sandbox-provider-spec = { path = "vendor/sandbox_provider_spec-0.5.190-py3-none-any.whl" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sps_provider_kubi"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
