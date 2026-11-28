@@ -111,3 +111,31 @@ def test_run_returns_exit_code_and_output() -> None:
         provider(handler).run(SCREEN["id"], RunRequest(argv=["sh", "-c", "echo hi; exit 3"]))
     )
     assert res.exit_code == 3 and res.stdout == "hi\n" and not res.timed_out
+
+
+def test_destroy_never_claims_a_screen_that_is_not_ours() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/spend"):
+            return httpx.Response(
+                200, json={"name": "customer-screen", "final": False, "hours": []}
+            )
+        return httpx.Response(200, json={**SCREEN, "name": "customer-screen"})
+
+    with pytest.raises(SpsError) as err:
+        asyncio.run(provider(handler).destroy(SCREEN["id"]))
+    assert err.value.code == "not_found"
+
+
+def test_env_names_must_be_shell_names() -> None:
+    with pytest.raises(SpsError) as err:
+        asyncio.run(
+            provider(lambda r: httpx.Response(500)).create(
+                CreateRequest(env={"A.B": "1"}), idempotency_key="k"
+            )
+        )
+    assert err.value.code == "invalid_request"
+
+
+def test_static_discovery_needs_no_credentials() -> None:
+    d = KubiProvider.static_discovery()
+    assert d.spec_version == "1.1" and d.limits.file_bytes == 1 << 30

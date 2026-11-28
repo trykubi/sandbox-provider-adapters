@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import shlex
 import time
 from collections.abc import AsyncIterable, AsyncIterator, Mapping
@@ -100,6 +101,7 @@ _CODES = {
     "UNSUPPORTED_CAPABILITY": "unsupported",
     "URL_NOT_ALLOWED": "invalid_request",
 }
+_ENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _RUNNING = {"provisioning", "starting", "running", "restarting"}
 _STOPPED = {"stopping", "stopped"}
 _ENDED = {"exited", "killed", "timed_out"}
@@ -133,9 +135,11 @@ class KubiProvider(Provider):
         credentials: Mapping[str, str],
         *,
         transport: httpx.AsyncBaseTransport | None = None,
+        endpoint: str = DEFAULT_ENDPOINT,
     ) -> None:
         super().__init__(credentials)
-        endpoint = (self.credentials.get("endpoint") or DEFAULT_ENDPOINT).rstrip("/")
+        # The key only ever goes to api.trykubi.com (the manifest's api_domains); `endpoint` is for tests.
+        endpoint = endpoint.rstrip("/")
         self._http = httpx.AsyncClient(
             base_url=f"{endpoint}/v1",
             headers={
@@ -263,6 +267,9 @@ class KubiProvider(Provider):
                 raise SpsError("unsupported", f"A Kubi sandbox lives at least {MIN_LIFETIME_S} s")
             body["ends_in_s"] = lifetime
         env = dict(request.env)
+        for key in env:
+            if not _ENV_KEY.fullmatch(key):
+                raise SpsError("invalid_request", f"env name {key!r} is not a shell variable name")
         if env:
             body["labels"][ENV_LABEL] = "1"
         return body, env
@@ -291,6 +298,10 @@ class KubiProvider(Provider):
                 raise SpsError("timeout", "The screen did not start in time", outcome="unknown")
 
     # -- operations -------------------------------------------------------------
+
+    @classmethod
+    def static_discovery(cls) -> Discovery:
+        return build_discovery(provider_id=cls.provider_id, provider_name=cls.name)
 
     async def discovery(self) -> Discovery:
         await self._json("GET", "/me")  # proves the key
@@ -326,6 +337,27 @@ class KubiProvider(Provider):
         screen = await self._json("GET", f"/screens/{screen_id}")
         if screen.get("name") != body["name"]:
             raise SpsError("conflict", "Idempotency-Key was used with a different body")
+        try:
+            return await self._finish_create(screen, op, env)
+        except SpsError as error:
+            # Ours (the name matched) and refused, not merely slow: delete it rather than leave it running,
+            # perhaps with no end time. A timeout keeps it, so a resend with the same key finds it.
+            if error.outcome == "unknown":
+                raise
+            try:
+                await self._req(
+                    "DELETE",
+                    f"/screens/{screen_id}",
+                    headers={"Idempotency-Key": f"sps-destroy-{screen_id}"},
+                )
+            except SpsError:
+                pass
+            raise
+
+    async def _finish_create(
+        self, screen: dict[str, Any], op: dict[str, Any], env: dict[str, str]
+    ) -> Sandbox:
+        screen_id = screen["id"]
         if screen.get("state") not in ("running",):
             if screen.get("state") in ("deleting", "deleted", "failed"):
                 raise SpsError("provider_error", "The screen failed to start", outcome="failed")
@@ -377,7 +409,7 @@ class KubiProvider(Provider):
                 raise
             # An ended sandbox is no longer readable; Kubi's spend record says whether it was ours.
             spend = await self._spend(sandbox_id)
-            if spend is None:
+            if spend is None or not str(spend.get("name", "")).startswith(NAME_PREFIX):
                 raise
             return DestroyResult(sandbox_id=sandbox_id, state="destroyed")
         try:

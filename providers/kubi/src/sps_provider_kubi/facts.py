@@ -28,7 +28,9 @@ PAGE_BYTES = 1 << 20  # the most output of one stream that one exec read returns
 LIST_LIMIT = 100
 NAME_PREFIX = "sps-"  # every screen the adapter makes; it never touches another screen
 ENV_PATH = "/home/user/.config/sps/env.sh"  # create-time env, sourced before each command
-ENV_LABEL = "sps.env"  # Kubi-side marker that a screen has ENV_PATH; never shown as a label
+ENV_LABEL = (
+    "kubi.sps-adapter/env"  # Kubi-side marker that a screen has ENV_PATH; never shown as a label
+)
 HOME = "/home/user"
 COST_FINAL_WITHIN_S = 300  # a deleted screen's charges are all made before it is deleted
 LIMITS = Limits(

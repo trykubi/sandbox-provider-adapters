@@ -25,6 +25,14 @@ its own VM (`kernel: dedicated`), in France (`kubi:eu-1`). It calls only Kubi's 
 - Lifetimes run from 60 s to 30 days; Kubi deletes the screen at its end time, checked every 10 s.
 - Commands run as `user` in `/home/user`, with passwordless `sudo` (`root: sudo`).
 
+## Limits to know
+
+- A command's argv is at most 200 items of 4,000 characters each (Kubi's exec), short of SPS's 32 KiB element;
+  longer input goes through a file. Create-time `env` adds its variables to that count.
+- Kubi allows 10 calls a second per screen; each operation costs one extra read of the screen, so a busy consumer can
+  get `rate_limited` with `retry_after`.
+- `run` takes its time limit in whole seconds, rounded up.
+
 ## Run the tester
 
 The key needs `read`, `exec` and `power`. Disposable screens draw on the account's usage credit (USD 0.035 an

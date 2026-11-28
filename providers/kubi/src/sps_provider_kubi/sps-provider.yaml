@@ -7,9 +7,5 @@ credential_fields:
   - name: api_key
     secret: true
     description: "Kubi API key with read, exec and power (console.trykubi.com, API keys)"
-  - name: endpoint
-    secret: false
-    required: false
-    default: "https://api.trykubi.com"
-    description: "Kubi API base URL"
 api_domains: [api.trykubi.com]
+forgets_ended_sandboxes: true
